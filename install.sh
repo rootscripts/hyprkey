@@ -1,39 +1,67 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-APP_DIR="$HOME/.config/hyprkey"
-BIN_DIR="$HOME/.local/bin"
-DESKTOP_DIR="$HOME/.local/share/applications"
-VENV_DIR="$APP_DIR/venv"
+bdir="${XDG_CONFIG_HOME:-$HOME/.config}/hyprkey"
+vdir="$bdir/venv"
+bindir="${XDG_BIN_HOME:-$HOME/.local/bin}"
+appdir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+pybin="$vdir/bin/python3"
+pipbin="$vdir/bin/pip"
 
-mkdir -p "$APP_DIR" "$BIN_DIR" "$DESKTOP_DIR"
+c0="\033[0m"
+cb="\033[1m"
+cd="\033[2m"
+cw="\033[38;2;226;226;229m"
 
-echo "==> [1/4] Настройка прав доступа к вводу..."
-if [ ! -f /etc/udev/rules.d/99-hyprkey-input.rules ]; then
-    echo 'KERNEL=="event*", SUBSYSTEM=="input", MODE="0666"' | sudo tee /etc/udev/rules.d/99-hyprkey-input.rules >/dev/null
-    sudo udevadm control --reload-rules && sudo udevadm trigger
+msg() {
+    printf " ${cd}::${c0} %b%s${c0}\n" "$cw" "$1"
+}
+
+err() {
+    printf " ${cd}!!${c0} \033[31m%s${c0}\n" "$1" >&2
+    exit 1
+}
+
+command -v python3 >/dev/null 2>&1 || err "python3 is not installed"
+
+mkdir -p "$bdir" "$bindir" "$appdir"
+
+msg "configuring udev rules for input devices"
+if [ ! -f /etc/udev/rules.d/99-hyprkey.rules ]; then
+    if command -v sudo >/dev/null 2>&1; then
+        echo 'KERNEL=="event*", SUBSYSTEM=="input", MODE="0666"' | sudo tee /etc/udev/rules.d/99-hyprkey.rules >/dev/null
+        sudo udevadm control --reload-rules && sudo udevadm trigger
+    elif command -v pkexec >/dev/null 2>&1; then
+        echo 'KERNEL=="event*", SUBSYSTEM=="input", MODE="0666"' | pkexec tee /etc/udev/rules.d/99-hyprkey.rules >/dev/null
+        pkexec udevadm control --reload-rules && pkexec udevadm trigger
+    fi
 fi
-sudo chmod 666 /dev/input/event* 2>/dev/null || true
+chmod 666 /dev/input/event* 2>/dev/null || true
 
-echo "==> [2/4] Подготовка окружения Python..."
-if [ ! -d "$VENV_DIR" ]; then
-    python3 -m venv "$VENV_DIR"
+msg "initializing python environment"
+if [ ! -f "$pybin" ]; then
+    python3 -m venv "$vdir" || err "failed to create venv (install python3-venv)"
 fi
 
-"$VENV_DIR/bin/pip" install --upgrade pip -q
-"$VENV_DIR/bin/pip" install -q PyQt6 numpy pygame evdev
+msg "syncing dependencies"
+"$pipbin" install --upgrade pip -q
+"$pipbin" install -q PyQt6 numpy pygame evdev
 
-echo "==> [3/4] Установка компонентов Hyprkey..."
-
-cat << 'EOF' > "$APP_DIR/config.json"
+msg "writing configuration files"
+if [ ! -f "$bdir/config.json" ]; then
+    cat << 'EOF' > "$bdir/config.json"
 {"muted": false, "preset": 0, "volume": 100, "mouse": true, "headset": false}
 EOF
+fi
 
-cat << 'EOF' > "$APP_DIR/custom.json"
+if [ ! -f "$bdir/custom.json" ]; then
+    cat << 'EOF' > "$bdir/custom.json"
 {"freq": 380, "click": 2, "warm": 35, "decay": 75, "drop": 30, "dur": 35, "soft": 20, "body": 30}
 EOF
+fi
 
-cat << 'EOF' > "$APP_DIR/daemon.py"
+msg "building synthesis daemon"
+cat << 'EOF' > "$bdir/daemon.py"
 import sys, os, signal, json, time, select
 import numpy as np, pygame
 from evdev import InputDevice, ecodes, list_devices
@@ -77,14 +105,14 @@ def make_pop(freq=480, dur=0.030, decay=0.0055, p_drop=0.40, click_mix=0.03, war
 def create_palette(base_f, dur, decay, drop, click, warm, vol, att=0.0018, body=0.0, hset=False):
     return {
         "normal": [
-            make_pop(base_f*0.96, dur, decay, drop, click, warm, vol, att, body, hset),
-            make_pop(base_f*0.99, dur, decay, drop, click, warm, vol, att, body, hset),
-            make_pop(base_f*1.02, dur, decay, drop, click, warm, vol, att, body, hset),
-            make_pop(base_f*1.05, dur, decay, drop, click, warm, vol, att, body, hset)
+            make_pop(base_f * 0.96, dur, decay, drop, click, warm, vol, att, body, hset),
+            make_pop(base_f * 0.99, dur, decay, drop, click, warm, vol, att, body, hset),
+            make_pop(base_f * 1.02, dur, decay, drop, click, warm, vol, att, body, hset),
+            make_pop(base_f * 1.05, dur, decay, drop, click, warm, vol, att, body, hset)
         ],
-        "space": make_pop(base_f*0.70, dur*1.35, decay*1.5, drop*0.9, click*0.8, warm*1.3, vol*1.1, att*1.2, body*1.3, hset),
-        "back": make_pop(base_f*0.88, dur*0.95, decay*0.9, drop*0.8, click*0.8, warm*0.8, vol*0.9, att, body*0.8, hset),
-        "mouse": make_pop(base_f*1.30, dur*0.8, decay*0.8, drop*1.2, click*1.3, warm*0.5, vol*0.9, att*0.9, body*0.5, hset)
+        "space": make_pop(base_f * 0.70, dur * 1.35, decay * 1.5, drop * 0.9, click * 0.8, warm * 1.3, vol * 1.1, att * 1.2, body * 1.3, hset),
+        "back": make_pop(base_f * 0.88, dur * 0.95, decay * 0.9, drop * 0.8, click * 0.8, warm * 0.8, vol * 0.9, att, body * 0.8, hset),
+        "mouse": make_pop(base_f * 1.30, dur * 0.8, decay * 0.8, drop * 1.2, click * 1.3, warm * 0.5, vol * 0.9, att * 0.9, body * 0.5, hset)
     }
 
 specs = [
@@ -121,11 +149,11 @@ def load_config(signum=None, frame=None):
             if os.path.exists(cust_f):
                 with open(cust_f) as f:
                     c = json.load(f)
-            profs.append(create_palette(c.get("freq", 380), c.get("dur", 35)/1000.0, c.get("decay", 75)/10000.0, c.get("drop", 30)/100.0, c.get("click", 2)/100.0, c.get("warm", 35)/100.0, 0.85, c.get("soft", 20)/10000.0, c.get("body", 30)/100.0, hset=hset))
+            profs.append(create_palette(c.get("freq", 380), c.get("dur", 35) / 1000.0, c.get("decay", 75) / 10000.0, c.get("drop", 30) / 100.0, c.get("click", 2) / 100.0, c.get("warm", 35) / 100.0, 0.85, c.get("soft", 20) / 10000.0, c.get("body", 30) / 100.0, hset=hset))
         elif state.get("preset", 0) == len(profs) - 1 and os.path.exists(cust_f):
             with open(cust_f) as f:
                 c = json.load(f)
-            profs[-1] = create_palette(c.get("freq", 380), c.get("dur", 35)/1000.0, c.get("decay", 75)/10000.0, c.get("drop", 30)/100.0, c.get("click", 2)/100.0, c.get("warm", 35)/100.0, 0.85, c.get("soft", 20)/10000.0, c.get("body", 30)/100.0, hset=hset)
+            profs[-1] = create_palette(c.get("freq", 380), c.get("dur", 35) / 1000.0, c.get("decay", 75) / 10000.0, c.get("drop", 30) / 100.0, c.get("click", 2) / 100.0, c.get("warm", 35) / 100.0, 0.85, c.get("soft", 20) / 10000.0, c.get("body", 30) / 100.0, hset=hset)
         vol = state.get("volume", 100) / 100.0
         for pr in profs:
             pr["space"].set_volume(vol)
@@ -182,8 +210,9 @@ while True:
         time.sleep(1)
 EOF
 
-cat << 'EOF' > "$APP_DIR/gui.py"
-import sys, json, os, signal, math
+msg "building interface"
+cat << 'EOF' > "$bdir/gui.py"
+import sys, json, os, signal
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QSlider, QLabel, QFrame
 from PyQt6.QtCore import Qt, QTimer, QVariantAnimation, QRectF, QPointF
 from PyQt6.QtGui import QCursor, QPainter, QColor, QFont, QFontMetrics, QPen, QPolygonF
@@ -508,24 +537,25 @@ if __name__ == "__main__":
     sys.exit(app.exec())
 EOF
 
-cat << EOF > "$BIN_DIR/hyprkey"
+msg "generating executable and desktop entry"
+cat << EOF > "$bindir/hyprkey"
 #!/usr/bin/env bash
 pkill -9 -f "daemon.py" >/dev/null 2>&1 || true
-nohup "$VENV_DIR/bin/python3" "$APP_DIR/daemon.py" >/dev/null 2>&1 &
-"$VENV_DIR/bin/python3" "$APP_DIR/gui.py"
+nohup "$pybin" "$bdir/daemon.py" >/dev/null 2>&1 &
+"$pybin" "$bdir/gui.py"
 EOF
 
-cat << EOF > "$DESKTOP_DIR/hyprkey.desktop"
+cat << EOF > "$appdir/hyprkey.desktop"
 [Desktop Entry]
 Name=Hyprkey
-Comment=Relaxing ASMR Keyboard Sound Generator
-Exec=$BIN_DIR/hyprkey
+Comment=ASMR Keyboard Sound Generator
+Exec=$bindir/hyprkey
 Terminal=false
 Type=Application
 Categories=Utility;Audio;
 EOF
 
-chmod +x "$APP_DIR/daemon.py" "$APP_DIR/gui.py" "$BIN_DIR/hyprkey"
+chmod +x "$bdir/daemon.py" "$bdir/gui.py" "$bindir/hyprkey"
 
-echo "==> [4/4] Запуск приложения..."
-"$BIN_DIR/hyprkey"
+msg "launching"
+exec "$bindir/hyprkey"
