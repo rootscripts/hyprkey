@@ -212,10 +212,10 @@ EOF
 
 msg "building interface"
 cat << 'EOF' > "$bdir/gui.py"
-import sys, json, os, signal
+import sys, json, os, signal, math
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QSlider, QLabel, QFrame
-from PyQt6.QtCore import Qt, QTimer, QVariantAnimation, QRectF, QPointF
-from PyQt6.QtGui import QCursor, QPainter, QColor, QFont, QFontMetrics, QPen, QPolygonF
+from PyQt6.QtCore import Qt, QTimer, QVariantAnimation, QEasingCurve, QRectF, QPointF
+from PyQt6.QtGui import QCursor, QPainter, QPainterPath, QColor, QFont, QFontMetrics, QPen, QPolygonF
 
 cfg_f = os.path.expanduser("~/.config/hyprkey/config.json")
 cust_f = os.path.expanduser("~/.config/hyprkey/custom.json")
@@ -223,41 +223,195 @@ pid_f = os.path.expanduser("~/.config/hyprkey/daemon.pid")
 
 PRESETS = ["iPhone Bubble", "Creamy Butter", "Boba Jelly", "Wooden Block", "Marshmallow", "Thocky Mech", "Rain Drop", "Ceramic Pebble", "Matcha Latte", "Holy Panda", "Gateron Black Ink", "Alpaca Linear", "Topre Silent", "Coffee Bean", "Custom (Expert)"]
 
-class MBtn(QPushButton):
+class JellyBtn(QPushButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._s = 1.0
+        self.on = False
+        self.anim = QVariantAnimation(self)
+        self.anim.valueChanged.connect(self._set_s)
+
+    def _set_s(self, val):
+        self._s = val
+        self.update()
+
+    def mousePressEvent(self, e):
+        self.anim.stop()
+        self.anim.setDuration(110)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        self.anim.setStartValue(self._s)
+        self.anim.setEndValue(0.88)
+        self.anim.start()
+        super().mousePressEvent(e)
+
+    def mouseReleaseEvent(self, e):
+        self.anim.stop()
+        self.anim.setDuration(460)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutBack)
+        self.anim.setStartValue(self._s)
+        self.anim.setEndValue(1.0)
+        self.anim.start()
+        super().mouseReleaseEvent(e)
+
+class PwrBtn(JellyBtn):
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cx, cy = self.width() / 2.0, self.height() / 2.0
+        p.translate(cx, cy)
+        p.scale(self._s, self._s)
+        p.translate(-cx, -cy)
+
+        bg = QColor("#E2E2E5") if self.on else QColor("#2F3033")
+        fg = QColor("#1A1C1E") if self.on else QColor("#74777F")
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(bg)
+        p.drawRoundedRect(self.rect(), 32, 32)
+
+        p.setPen(fg)
+        f = p.font()
+        f.setBold(True)
+        f.setPixelSize(28)
+        p.setFont(f)
+        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "⏻")
+
+class MBtn(JellyBtn):
     def __init__(self):
         super().__init__()
         self.on = True
+
     def paintEvent(self, e):
-        super().paintEvent(e)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        c = QColor("#1A1C1E") if self.on else QColor("#74777F")
-        p.setPen(QPen(c, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        p.setBrush(Qt.BrushStyle.NoBrush)
         cx, cy = self.width() / 2.0, self.height() / 2.0
+        p.translate(cx, cy)
+        p.scale(self._s, self._s)
+        p.translate(-cx, -cy)
+
+        bg = QColor("#E2E2E5") if self.on else QColor("#2F3033")
+        fg = QColor("#1A1C1E") if self.on else QColor("#74777F")
+
+        path = QPainterPath()
+        r = QRectF(self.rect())
+        path.moveTo(r.left() + 14, r.top())
+        path.lineTo(r.right() - 32, r.top())
+        path.arcTo(QRectF(r.right() - 64, r.top(), 64, 64), 90, -180)
+        path.lineTo(r.left() + 14, r.bottom())
+        path.quadTo(r.left(), r.bottom(), r.left(), r.bottom() - 14)
+        path.lineTo(r.left(), r.top() + 14)
+        path.quadTo(r.left(), r.top(), r.left() + 14, r.top())
+        path.closeSubpath()
+
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(bg)
+        p.drawPath(path)
+
+        pen = QPen(fg, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(QRectF(cx - 10, cy - 15, 20, 30), 10, 10)
         p.drawLine(QPointF(cx, cy - 15), QPointF(cx, cy - 7))
-        p.setBrush(c)
+        p.setBrush(fg)
         p.setPen(Qt.PenStyle.NoPen)
         p.drawRoundedRect(QRectF(cx - 1.8, cy - 11, 3.6, 7), 1.8, 1.8)
 
-class HBtn(QPushButton):
+class HBtn(JellyBtn):
     def __init__(self):
         super().__init__()
         self.on = False
+
     def paintEvent(self, e):
-        super().paintEvent(e)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        c = QColor("#1A1C1E") if self.on else QColor("#74777F")
-        p.setPen(QPen(c, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.setBrush(Qt.BrushStyle.NoBrush)
         cx, cy = self.width() / 2.0, self.height() / 2.0
+        p.translate(cx, cy)
+        p.scale(self._s, self._s)
+        p.translate(-cx, -cy)
+
+        bg = QColor("#E2E2E5") if self.on else QColor("#2F3033")
+        fg = QColor("#1A1C1E") if self.on else QColor("#74777F")
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(bg)
+        p.drawRoundedRect(self.rect(), 19, 19)
+
+        pen = QPen(fg, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawArc(QRectF(cx - 10, cy - 10, 20, 20), 0, 180 * 16)
-        p.setBrush(c)
+        p.setBrush(fg)
         p.setPen(Qt.PenStyle.NoPen)
         p.drawRoundedRect(QRectF(cx - 12, cy - 3, 4.5, 10), 2, 2)
         p.drawRoundedRect(QRectF(cx + 7.5, cy - 3, 4.5, 10), 2, 2)
+
+class WaveSlider(QSlider):
+    def __init__(self, is_accent=False, seed=0):
+        super().__init__(Qt.Orientation.Horizontal)
+        self.is_accent = is_accent
+        self.wlen = 44.0 + (seed * 3.7) % 13.0
+        self.speed = 0.026 + (seed * 0.0031) % 0.012
+        self.phase = (seed * 1.57) % (2.0 * math.pi)
+        self.amp = 2.3 + (seed * 0.14) % 0.5
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setFixedHeight(26)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.tick)
+        self.timer.start(20)
+
+    def tick(self):
+        self.phase += self.speed
+        self.update()
+
+    def mousePressEvent(self, ev):
+        self.seek(ev.position().x())
+        super().mousePressEvent(ev)
+
+    def mouseMoveEvent(self, ev):
+        if ev.buttons() & Qt.MouseButton.LeftButton:
+            self.seek(ev.position().x())
+        super().mouseMoveEvent(ev)
+
+    def seek(self, mx):
+        pad = 9.0
+        uw = self.width() - 2 * pad
+        if uw <= 0: return
+        ratio = max(0.0, min(1.0, (mx - pad) / uw))
+        val = int(self.minimum() + ratio * (self.maximum() - self.minimum()))
+        self.setValue(val)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = float(self.width()), float(self.height())
+        cy = h / 2.0
+        pad = 9.0
+        uw = w - 2 * pad
+        val_rng = max(1, self.maximum() - self.minimum())
+        ratio = (self.value() - self.minimum()) / float(val_rng)
+        fx = pad + ratio * uw
+
+        p.setPen(QPen(QColor("#2F3033"), 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        if fx < w - pad:
+            p.drawLine(QPointF(fx, cy), QPointF(w - pad, cy))
+
+        c = QColor("#E2E2E5") if self.is_accent else QColor("#A0A0A5")
+        p.setPen(QPen(c, 4.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+
+        if fx > pad:
+            path = QPainterPath()
+            path.moveTo(pad, cy)
+            x_start = int(pad)
+            x_end = int(fx)
+            for x in range(x_start, x_end + 1):
+                rel = x - pad
+                env = min(1.0, (x - pad) / 12.0, (fx - x) / 12.0) if (fx - pad) > 24 else (fx - pad) / 24.0
+                env = max(0.0, env)
+                y = cy - env * self.amp * math.sin(2.0 * math.pi * rel / self.wlen - self.phase)
+                path.lineTo(x, y)
+            p.drawPath(path)
+
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(c)
+        p.drawEllipse(QPointF(fx, cy), 6.5, 6.5)
 
 class VIcon(QWidget):
     def __init__(self):
@@ -371,6 +525,7 @@ class App(QWidget):
         except Exception:
             self.cust = {}
         self.init_ui()
+
     def init_ui(self):
         self.setWindowTitle("Hyprkey")
         self.setFixedWidth(278)
@@ -379,6 +534,7 @@ class App(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         layout.setSpacing(16)
         layout.setContentsMargins(34, 26, 34, 26)
+
         self.title = QLabel("HYPRKEY")
         self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tf = QFont("Arial Black")
@@ -391,24 +547,29 @@ class App(QWidget):
         self.title.setFont(tf)
         self.title.setStyleSheet("color: #FFFFFF; font-weight: 900; letter-spacing: 4px; padding-bottom: 2px;")
         layout.addWidget(self.title)
+
         top_layout = QHBoxLayout()
         top_layout.setSpacing(15)
-        self.pwr_btn = QPushButton("⏻")
+        self.pwr_btn = PwrBtn()
         self.pwr_btn.setFixedSize(64, 64)
         self.pwr_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.pwr_btn.clicked.connect(self.toggle_mute)
+
         self.mbtn = MBtn()
         self.mbtn.setFixedSize(131, 64)
         self.mbtn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.mbtn.clicked.connect(self.toggle_mouse)
+
         top_layout.addWidget(self.pwr_btn)
         top_layout.addWidget(self.mbtn)
         layout.addLayout(top_layout)
+
         self.hbtn = HBtn()
         self.hbtn.setFixedSize(210, 38)
         self.hbtn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.hbtn.clicked.connect(self.toggle_headset)
         layout.addWidget(self.hbtn, alignment=Qt.AlignmentFlag.AlignCenter)
+
         self.combo = QComboBox()
         self.combo.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.combo.setFixedSize(210, 44)
@@ -417,87 +578,98 @@ class App(QWidget):
         self.combo.currentIndexChanged.connect(self.change_preset)
         self.combo.setStyleSheet("QComboBox { background-color: #2F3033; color: #E2E2E5; border-radius: 22px; padding-left: 20px; font-size: 13px; font-weight: bold; border: none; } QComboBox::drop-down { border: none; width: 40px; } QComboBox QAbstractItemView { background-color: #2F3033; color: #E2E2E5; selection-background-color: #E2E2E5; selection-color: #1A1C1E; border-radius: 12px; outline: none; padding: 5px; }")
         layout.addWidget(self.combo, alignment=Qt.AlignmentFlag.AlignCenter)
+
         sl_box = QHBoxLayout()
         sl_box.setSpacing(10)
         self.vicon = VIcon()
-        self.vol_sl = QSlider(Qt.Orientation.Horizontal)
+        self.vol_sl = WaveSlider(is_accent=True, seed=0)
         self.vol_sl.setRange(0, 100)
         self.vol_sl.setValue(int(self.state.get("volume", 100)))
-        self.vol_sl.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.vol_sl.setStyleSheet("QSlider { min-height: 22px; } QSlider::groove:horizontal { border-radius: 4px; height: 8px; background: #2F3033; } QSlider::sub-page:horizontal { background: #E2E2E5; border-radius: 4px; } QSlider::handle:horizontal { background: #E2E2E5; width: 16px; height: 16px; margin: -4px 0; border-radius: 8px; }")
         self.vol_sl.valueChanged.connect(self.change_vol)
         sl_box.addWidget(self.vicon)
         sl_box.addWidget(self.vol_sl)
         layout.addLayout(sl_box)
+
         self.test_box = JText()
         fnt = self.test_box.font()
         fnt.setPointSize(12)
         fnt.setBold(True)
         self.test_box.setFont(fnt)
         layout.addWidget(self.test_box, alignment=Qt.AlignmentFlag.AlignCenter)
+
         self.cpanel = QFrame()
         self.cpanel.setStyleSheet("QFrame { border: none; }")
         cl = QVBoxLayout(self.cpanel)
         cl.setContentsMargins(0, 4, 0, 4)
         cl.setSpacing(6)
-        def make_sl(name, minv, maxv, val, cb):
+
+        def make_sl(name, minv, maxv, val, cb, idx=0):
             r = QHBoxLayout()
             r.setContentsMargins(2, 0, 2, 0)
             r.setSpacing(8)
             l = QLabel(name)
             l.setFixedWidth(36)
             l.setStyleSheet("color:#A0A0A5; font-size:11px; font-weight:bold;")
-            s = QSlider(Qt.Orientation.Horizontal)
+            s = WaveSlider(is_accent=False, seed=idx)
             s.setRange(minv, maxv)
             s.setValue(int(val))
-            s.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-            s.setStyleSheet("QSlider { min-height: 22px; } QSlider::groove:horizontal { border-radius: 3px; height: 6px; background: #2F3033; } QSlider::sub-page:horizontal { background: #A0A0A5; border-radius: 3px; } QSlider::handle:horizontal { background: #A0A0A5; width: 14px; height: 14px; margin: -4px 0; border-radius: 7px; }")
             s.valueChanged.connect(cb)
             r.addWidget(l)
             r.addWidget(s)
             cl.addLayout(r)
             return s
-        self.sf = make_sl("Freq", 100, 1000, self.cust.get("freq", 380), self.save_c)
-        self.sc = make_sl("Click", 0, 50, self.cust.get("click", 2), self.save_c)
-        self.sw = make_sl("Warm", 0, 100, self.cust.get("warm", 35), self.save_c)
-        self.sd = make_sl("Decay", 10, 200, self.cust.get("decay", 75), self.save_c)
-        self.sp = make_sl("Drop", 0, 100, self.cust.get("drop", 30), self.save_c)
-        self.su = make_sl("Dur", 15, 80, self.cust.get("dur", 35), self.save_c)
-        self.st = make_sl("Soft", 5, 50, self.cust.get("soft", 20), self.save_c)
-        self.sb = make_sl("Body", 0, 100, self.cust.get("body", 30), self.save_c)
+
+        self.sf = make_sl("Freq", 100, 1000, self.cust.get("freq", 380), self.save_c, 1)
+        self.sc = make_sl("Click", 0, 50, self.cust.get("click", 2), self.save_c, 2)
+        self.sw = make_sl("Warm", 0, 100, self.cust.get("warm", 35), self.save_c, 3)
+        self.sd = make_sl("Decay", 10, 200, self.cust.get("decay", 75), self.save_c, 4)
+        self.sp = make_sl("Drop", 0, 100, self.cust.get("drop", 30), self.save_c, 5)
+        self.su = make_sl("Dur", 15, 80, self.cust.get("dur", 35), self.save_c, 6)
+        self.st = make_sl("Soft", 5, 50, self.cust.get("soft", 20), self.save_c, 7)
+        self.sb = make_sl("Body", 0, 100, self.cust.get("body", 30), self.save_c, 8)
         layout.addWidget(self.cpanel)
+
         self.anim = QVariantAnimation(self)
-        self.anim.setDuration(280)
+        self.anim.setDuration(350)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutBack)
         self.anim.valueChanged.connect(self.on_anim_step)
         self.update_ui()
         self.check_cpanel(False)
+
     def on_anim_step(self, val):
         self.cpanel.setFixedHeight(val)
         self.adjustSize()
+
     def toggle_mute(self):
         self.state["muted"] = not self.state["muted"]
         self.save_cfg()
         self.update_ui()
+
     def toggle_mouse(self):
         self.state["mouse"] = not self.state.get("mouse", True)
         self.save_cfg()
         self.update_ui()
+
     def toggle_headset(self):
         self.state["headset"] = not self.state.get("headset", False)
         self.save_cfg()
         self.update_ui()
+
     def change_preset(self, idx):
         self.state["preset"] = idx
         self.save_cfg()
         self.check_cpanel(True)
+
     def change_vol(self, val):
         self.state["volume"] = int(val)
         self.save_cfg()
+
     def save_c(self):
         self.cust = {"freq": int(self.sf.value()), "click": int(self.sc.value()), "warm": int(self.sw.value()), "decay": int(self.sd.value()), "drop": int(self.sp.value()), "dur": int(self.su.value()), "soft": int(self.st.value()), "body": int(self.sb.value())}
         with open(cust_f, "w") as f:
             json.dump(self.cust, f)
         self.save_cfg()
+
     def save_cfg(self):
         with open(cfg_f, "w") as f:
             json.dump(self.state, f)
@@ -506,9 +678,10 @@ class App(QWidget):
                 os.kill(int(f.read().strip()), signal.SIGUSR1)
         except Exception:
             pass
+
     def check_cpanel(self, animate=False):
         is_cust = (self.state.get("preset", 0) == len(PRESETS) - 1)
-        target = 248 if is_cust else 0
+        target = 252 if is_cust else 0
         if animate:
             self.anim.setStartValue(self.cpanel.height())
             self.anim.setEndValue(target)
@@ -516,18 +689,15 @@ class App(QWidget):
         else:
             self.cpanel.setFixedHeight(target)
             self.adjustSize()
+
     def update_ui(self):
-        if self.state["muted"]:
-            self.pwr_btn.setStyleSheet("QPushButton { background-color: #2F3033; color: #74777F; border-radius: 32px; font-size: 28px; font-weight: bold; border: none; }")
-        else:
-            self.pwr_btn.setStyleSheet("QPushButton { background-color: #E2E2E5; color: #1A1C1E; border-radius: 32px; font-size: 28px; font-weight: bold; border: none; }")
-        m_on = self.state.get("mouse", True)
-        self.mbtn.on = m_on
-        self.mbtn.setStyleSheet(f"QPushButton {{ background-color: {'#E2E2E5' if m_on else '#2F3033'}; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 32px; border-bottom-right-radius: 32px; border: none; }}")
+        self.pwr_btn.on = not self.state["muted"]
+        self.pwr_btn.update()
+
+        self.mbtn.on = self.state.get("mouse", True)
         self.mbtn.update()
-        h_on = self.state.get("headset", False)
-        self.hbtn.on = h_on
-        self.hbtn.setStyleSheet(f"QPushButton {{ background-color: {'#E2E2E5' if h_on else '#2F3033'}; border-radius: 19px; border: none; }}")
+
+        self.hbtn.on = self.state.get("headset", False)
         self.hbtn.update()
 
 if __name__ == "__main__":
