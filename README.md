@@ -12,6 +12,7 @@
 
 A lightweight mechanical keyboard and mouse sound generator for Linux. Instead of looping static audio samples, Hyprkey synthesizes every keypress and click in real time with near-zero latency.
 
+version 1.0.1
 <p align="center">
   <img src="data/preview.png" alt="Hyprkey Window Preview" width="360">
 </p>
