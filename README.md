@@ -10,19 +10,21 @@
   <img src="https://img.shields.io/badge/License-MIT-1A1C1E?style=for-the-badge&labelColor=1A1C1E&color=2F3033" alt="License">
 </p>
 
-Real-time mechanical keyboard and mouse acoustics generator for Linux
+A lightweight mechanical keyboard and mouse sound generator for Linux. Instead of looping static audio samples, Hyprkey synthesizes every keypress and click in real time with near-zero latency.
 
-Every keypress and click is synthesized mathematically
+<p align="center">
+  <img src="data/preview.png" alt="Hyprkey Window Preview" width="360">
+</p>
 
 ---
 
 ### Features
 
-* **Procedural Synthesis** Pure math calculations instead of looped WAV files. Zero latency overhead
-* **14 ASMR Sound Profiles** Curated exclusively for creamy, deep, and thocky acoustics (Boba Jelly, Creamy Butter, Deep Thock, Marshmallow, Rain Drop, Topre, etc.).
-* **Headset Fix**  Dedicated hardware toggle that rolls off harsh high-frequency spikes to eliminate in-ear earphone fatigue
-* **Mouse Clicks** Physical click synthesis for mouse buttons.
-* **Custom Synthesizer Panel**  8 real-time sliders for sound customization: Frequency, Click transient, Warmth, Decay, Pitch drop, Duration, Softness, and Body resonance.
+* **Procedural Audio** — No bloated `.wav` sound packs. Audio is generated on the fly with virtually no delay.
+* **14 Switch Profiles** — Tuned for creamy, deep, and thocky profiles (Boba Jelly, Creamy Butter, Deep Thock, Marshmallow, Rain Drop, Topre, and more).
+* **Headphone / IEM Mode** — Tames harsh high-end transients so your ears don't get fatigued.
+* **Mouse Clicks** — Responsive click synthesis for mouse buttons.
+* **Live Synth Controls** — 8 real-time sliders to tweak frequency, click transient, warmth, decay, pitch drop, duration, softness, and body resonance.
 
 ---
 
